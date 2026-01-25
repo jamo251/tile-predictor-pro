@@ -3,7 +3,7 @@ import { Upload, Calendar, Trash2, Settings, Target, AlertTriangle, Loader2, Inf
 import { AppSettings, CellStat, UploadStatus, GameRecord } from '../types';
 
 interface DashboardProps {
-  onFileUpload: (files: FileList) => void;
+  onFileUpload: () => void;
   uploadStatus: UploadStatus;
   settings: AppSettings;
   onUpdateSettings: (s: AppSettings) => void;
@@ -29,17 +29,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   totalGames,
   gameHistory,
 }) => {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      onFileUpload(e.target.files);
-    }
-    e.target.value = '';
-  };
 
   const handleImportChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -149,7 +141,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Global Controls */}
         <div className="space-y-4">
           <button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={onFileUpload}
             disabled={uploadStatus === 'analyzing'}
             className="group w-full relative flex items-center justify-center gap-3 py-5 px-6 rounded-2xl transition-all font-bold overflow-hidden"
           >
@@ -163,14 +155,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <span className="tracking-tight">{uploadStatus === 'analyzing' ? 'Neural Processing...' : 'Upload Game Captures'}</span>
             </div>
           </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            accept="image/*"
-            multiple
-            onChange={handleFileChange}
-          />
           
           <div className="grid grid-cols-2 gap-3">
             <button

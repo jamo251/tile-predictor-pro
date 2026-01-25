@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AppSettings, GameRecord, CellStat, UploadStatus } from './types';
 import { geminiService } from './services/geminiService';
 import { HeatmapGrid } from './components/HeatmapGrid';
 import { Dashboard } from './components/Dashboard';
 import { analytics } from './services/analyticsService';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Home } from 'lucide-react';
 
 const STORAGE_KEY = 'tile_predictor_data_v1';
 const SETTINGS_KEY = 'tile_predictor_settings_v1';
@@ -32,6 +32,7 @@ const App: React.FC = () => {
   const [games, setGames] = useState<GameRecord[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     analytics.init();
@@ -66,10 +67,11 @@ const App: React.FC = () => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   }, [settings]);
 
-  const handleClearData = () => {
-    if (window.confirm("Are you sure you want to delete all historical game data?")) {
+  const handleClearData = (silent = false) => {
+    if (silent || window.confirm("Are you sure you want to clear the current analysis and return home?")) {
       setGames([]);
       localStorage.removeItem(STORAGE_KEY);
+      analytics.trackEvent('Data Cleared');
     }
   };
 
@@ -106,6 +108,7 @@ const App: React.FC = () => {
   };
 
   const handleLoadDemo = () => {
+    analytics.trackEvent('Demo Loaded');
     const demoGames: GameRecord[] = Array.from({ length: 15 }).map((_, i) => ({
       id: `demo-${i}`,
       timestamp: Date.now() - (i * 86400000),
@@ -158,6 +161,13 @@ const App: React.FC = () => {
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      processFileUpload(e.target.files);
+    }
+    e.target.value = '';
+  };
+
   const stats = useMemo<CellStat[]>(() => {
     const cellMap = new Map<string, { total: number; high: number; sum: number }>();
     const sortedGames = [...games].sort((a, b) => b.timestamp - a.timestamp);
@@ -203,18 +213,36 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col md:flex-row h-screen w-full bg-[#040715] overflow-hidden">
+      <input
+        type="file"
+        ref={fileInputRef}
+        className="hidden"
+        accept="image/*"
+        multiple
+        onChange={handleFileChange}
+      />
+      
       <main className="flex-1 relative flex flex-col min-h-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,_rgba(66,133,244,0.08)_0%,_transparent_50%),_radial-gradient(circle_at_70%_80%,_rgba(181,123,255,0.08)_0%,_transparent_50%)] -z-10"></div>
         <div className="flex-1 flex items-center justify-center p-4 sm:p-12 overflow-auto">
             {games.length > 0 ? (
                 <div className="w-full max-w-5xl animate-in fade-in duration-1000">
                     <div className="mb-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-                        <div>
-                            <h2 className="text-3xl font-bold tracking-tight text-white mb-2">Predictive Heatmap</h2>
-                            <div className="flex items-center gap-2 text-slate-400 text-sm">
-                                <span className="px-2 py-0.5 rounded bg-white/5 border border-white/10">{games.length} Boards Analyzed</span>
-                                <span>&bull;</span>
-                                <span className="text-blue-400 font-medium italic">High confidence targets identified</span>
+                        <div className="flex items-center gap-6">
+                            <button 
+                                onClick={() => handleClearData()}
+                                title="Back to Home"
+                                className="p-3 rounded-2xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all hover:scale-110 active:scale-95 shadow-lg"
+                            >
+                                <Home size={24} />
+                            </button>
+                            <div>
+                                <h2 className="text-3xl font-bold tracking-tight text-white mb-2">Predictive Heatmap</h2>
+                                <div className="flex items-center gap-2 text-slate-400 text-sm">
+                                    <span className="px-2 py-0.5 rounded bg-white/5 border border-white/10">{games.length} Boards Analyzed</span>
+                                    <span>&bull;</span>
+                                    <span className="text-blue-400 font-medium italic">High confidence targets identified</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -235,7 +263,10 @@ const App: React.FC = () => {
                         </p>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-5 justify-center items-center pt-6">
-                        <button onClick={() => {}} className="px-10 py-4 gemini-gradient text-white font-bold rounded-full shadow-[0_0_25px_rgba(71,135,255,0.3)] transition-all hover:scale-105 active:scale-95">
+                        <button 
+                            onClick={() => fileInputRef.current?.click()} 
+                            className="px-10 py-4 gemini-gradient text-white font-bold rounded-full shadow-[0_0_25px_rgba(71,135,255,0.3)] transition-all hover:scale-105 active:scale-95"
+                        >
                             Start Analysis
                         </button>
                         <button onClick={handleLoadDemo} className="px-10 py-4 bg-white/5 hover:bg-white/10 text-white font-bold rounded-full border border-white/10 transition-all hover:scale-105">
@@ -248,11 +279,11 @@ const App: React.FC = () => {
       </main>
       <aside className="w-full md:w-[400px] border-t md:border-t-0 md:border-l border-white/10 z-10 flex-shrink-0 flex flex-col h-[50vh] md:h-full overflow-hidden bg-[#040715]/40 backdrop-blur-3xl">
         <Dashboard 
-            onFileUpload={processFileUpload} 
+            onFileUpload={() => fileInputRef.current?.click()} 
             uploadStatus={uploadStatus} 
             settings={settings} 
             onUpdateSettings={setSettings} 
-            onClearData={handleClearData} 
+            onClearData={() => handleClearData()} 
             onDeleteGame={handleDeleteGame} 
             onExportData={handleExportData} 
             onImportData={handleImportData} 
