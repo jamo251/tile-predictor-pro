@@ -8,10 +8,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <script>
-      // Polyfill for process.env to prevent ReferenceErrors in browser-only environments (like GitHub Pages)
-      window.process = window.process || { env: {} };
-    </script>
     <style>
       body {
         background-color: #040715; 
@@ -19,23 +15,11 @@
         font-family: 'Inter', sans-serif;
         margin: 0;
       }
-      /* Gemini Styled Scrollbar */
-      ::-webkit-scrollbar {
-        width: 6px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.2);
-      }
-      .gemini-gradient {
-        background: linear-gradient(90deg, #4787FF 0%, #B57BFF 50%, #E881FF 100%);
-      }
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+      ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+      .gemini-gradient { background: linear-gradient(90deg, #4787FF 0%, #B57BFF 50%, #E881FF 100%); }
       .gemini-text-gradient {
         background: linear-gradient(90deg, #4787FF 0%, #B57BFF 50%, #E881FF 100%);
         -webkit-background-clip: text;
@@ -46,37 +30,24 @@
         backdrop-filter: blur(12px);
         border: 1px solid rgba(255, 255, 255, 0.1);
       }
-      /* Loading state before React mounts */
-      #root:empty::before {
-        content: 'Initializing Edge Engine...';
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        font-family: 'Inter', sans-serif;
-        font-weight: 500;
-        color: rgba(255, 255, 255, 0.2);
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        font-size: 11px;
-      }
     </style>
   <script type="importmap">
 {
   "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
     "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "@amplitude/analytics-browser": "https://esm.sh/@amplitude/analytics-browser@^2.11.1"
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@amplitude/analytics-browser": "https://esm.sh/@amplitude/analytics-browser@^2.33.5"
   }
 }
 </script>
 </head>
   <body>
     <div id="root"></div>
-    <!-- Explicit entry point for the ES module application -->
-    <script type="module" src="./index.tsx"></script>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>

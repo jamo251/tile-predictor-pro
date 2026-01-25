@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { AppSettings, GameRecord, CellStat, UploadStatus } from './types';
 import { geminiService } from './services/geminiService';
@@ -45,7 +44,6 @@ const App: React.FC = () => {
       try {
         const parsed = JSON.parse(storedGames);
         setGames(parsed);
-        analytics.trackEvent('Data Loaded From Storage', { gameCount: parsed.length });
       } catch (e) {
         console.error("Failed to parse stored games", e);
       }
@@ -70,19 +68,16 @@ const App: React.FC = () => {
 
   const handleClearData = () => {
     if (window.confirm("Are you sure you want to delete all historical game data?")) {
-      analytics.trackEvent('Data Wiped', { gameCount: games.length });
       setGames([]);
       localStorage.removeItem(STORAGE_KEY);
     }
   };
 
   const handleDeleteGame = (id: string) => {
-    analytics.trackEvent('Single Game Deleted');
     setGames(prev => prev.filter(g => g.id !== id));
   };
 
   const handleExportData = () => {
-    analytics.trackEvent('Data Export Triggered', { gameCount: games.length });
     const dataStr = JSON.stringify(games, null, 2);
     const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -94,19 +89,16 @@ const App: React.FC = () => {
   };
 
   const handleImportData = (file: File) => {
-    analytics.trackEvent('Data Import Attempted');
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const imported = JSON.parse(e.target?.result as string);
         if (Array.isArray(imported)) {
           if (window.confirm(`Import ${imported.length} games? This will merge with your existing data.`)) {
-            analytics.trackEvent('Data Import Success', { importedCount: imported.length });
             setGames(prev => [...prev, ...imported]);
           }
         }
       } catch (err) {
-        analytics.trackEvent('Data Import Failed', { error: 'invalid_json' });
         alert("Invalid database file.");
       }
     };
@@ -114,7 +106,6 @@ const App: React.FC = () => {
   };
 
   const handleLoadDemo = () => {
-    analytics.trackEvent('Demo Data Loaded');
     const demoGames: GameRecord[] = Array.from({ length: 15 }).map((_, i) => ({
       id: `demo-${i}`,
       timestamp: Date.now() - (i * 86400000),
@@ -128,10 +119,8 @@ const App: React.FC = () => {
   };
 
   const processFileUpload = async (files: FileList) => {
-    analytics.trackEvent('Analysis Started', { fileCount: files.length });
     setUploadStatus('analyzing');
     const newGames: GameRecord[] = [];
-    let successCount = 0;
     const fileArray = Array.from(files);
 
     try {
@@ -141,7 +130,6 @@ const App: React.FC = () => {
 
         try {
           const base64String = await fileToBase64(file);
-          // Directly invoke service; it manages its own GoogleGenAI client with process.env.API_KEY
           const tiles = await geminiService.processImage(base64String, settings.dimensions);
           if (tiles.length === 0) continue;
           
@@ -152,21 +140,15 @@ const App: React.FC = () => {
             tiles: tiles
           };
           newGames.push(newGame);
-          successCount++;
         } catch (err) {
           console.error(`Error processing file ${file.name}:`, err);
         }
       }
 
-      if (successCount > 0) {
-        analytics.trackEvent('Analysis Finished', { 
-          totalProcessed: fileArray.length, 
-          successful: successCount 
-        });
+      if (newGames.length > 0) {
         setGames(prev => [...prev, ...newGames]);
         setUploadStatus('success');
       } else {
-        analytics.trackEvent('Analysis Failed Completely');
         setUploadStatus('error');
       }
       setTimeout(() => setUploadStatus('idle'), 3000);
@@ -221,11 +203,8 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col md:flex-row h-screen w-full bg-[#040715] overflow-hidden">
-      
-      {/* Main Analysis Area */}
       <main className="flex-1 relative flex flex-col min-h-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,_rgba(66,133,244,0.08)_0%,_transparent_50%),_radial-gradient(circle_at_70%_80%,_rgba(181,123,255,0.08)_0%,_transparent_50%)] -z-10"></div>
-        
         <div className="flex-1 flex items-center justify-center p-4 sm:p-12 overflow-auto">
             {games.length > 0 ? (
                 <div className="w-full max-w-5xl animate-in fade-in duration-1000">
@@ -239,11 +218,7 @@ const App: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                    <HeatmapGrid 
-                        stats={stats} 
-                        dimensions={settings.dimensions} 
-                        onCellClick={() => {}}
-                    />
+                    <HeatmapGrid stats={stats} dimensions={settings.dimensions} onCellClick={() => {}} />
                 </div>
             ) : (
                 <div className="max-w-3xl text-center space-y-10 p-6 animate-in fade-in slide-in-from-bottom-4 duration-1000">
@@ -259,46 +234,31 @@ const App: React.FC = () => {
                             Stop guessing. Upload your game boards and let our neural-assisted analysis reveal the hidden probability of high-value scores.
                         </p>
                     </div>
-
                     <div className="flex flex-col sm:flex-row gap-5 justify-center items-center pt-6">
-                        <button 
-                            onClick={() => analytics.trackEvent('Get Started Clicked')}
-                            className="px-10 py-4 gemini-gradient text-white font-bold rounded-full shadow-[0_0_25px_rgba(71,135,255,0.3)] transition-all hover:scale-105 active:scale-95"
-                        >
+                        <button onClick={() => {}} className="px-10 py-4 gemini-gradient text-white font-bold rounded-full shadow-[0_0_25px_rgba(71,135,255,0.3)] transition-all hover:scale-105 active:scale-95">
                             Start Analysis
                         </button>
-                        <button 
-                            onClick={handleLoadDemo}
-                            className="px-10 py-4 bg-white/5 hover:bg-white/10 text-white font-bold rounded-full border border-white/10 transition-all hover:scale-105"
-                        >
+                        <button onClick={handleLoadDemo} className="px-10 py-4 bg-white/5 hover:bg-white/10 text-white font-bold rounded-full border border-white/10 transition-all hover:scale-105">
                             Explore Demo
                         </button>
-                    </div>
-
-                    <div className="pt-12 grid grid-cols-2 sm:grid-cols-4 gap-8 max-w-4xl mx-auto opacity-50">
-                        <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Fast Vision</div>
-                        <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Recency Bias</div>
-                        <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Exportable KB</div>
-                        <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Private Data</div>
                     </div>
                 </div>
             )}
         </div>
       </main>
-
       <aside className="w-full md:w-[400px] border-t md:border-t-0 md:border-l border-white/10 z-10 flex-shrink-0 flex flex-col h-[50vh] md:h-full overflow-hidden bg-[#040715]/40 backdrop-blur-3xl">
         <Dashboard 
-          onFileUpload={processFileUpload}
-          uploadStatus={uploadStatus}
-          settings={settings}
-          onUpdateSettings={setSettings}
-          onClearData={handleClearData}
-          onDeleteGame={handleDeleteGame}
-          onExportData={handleExportData}
-          onImportData={handleImportData}
-          topRecommendation={topRecommendation}
-          totalGames={games.length}
-          gameHistory={games}
+            onFileUpload={processFileUpload} 
+            uploadStatus={uploadStatus} 
+            settings={settings} 
+            onUpdateSettings={setSettings} 
+            onClearData={handleClearData} 
+            onDeleteGame={handleDeleteGame} 
+            onExportData={handleExportData} 
+            onImportData={handleImportData} 
+            topRecommendation={topRecommendation} 
+            totalGames={games.length} 
+            gameHistory={games} 
         />
       </aside>
     </div>
