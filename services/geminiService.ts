@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { GridDimensions, TileData } from "../types";
 import { analytics } from "./analyticsService";
@@ -10,10 +11,10 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const processImage = async (
   base64Image: string,
   dimensions: GridDimensions,
-  apiKey: string,
   retryCount = 0
 ): Promise<TileData[]> => {
-  const ai = new GoogleGenAI({ apiKey });
+  // Use process.env.API_KEY directly as mandated by Gemini API coding guidelines.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const prompt = `
     Analyze this game board screenshot. It is a grid with approximately ${dimensions.rows} rows and ${dimensions.cols} columns.
@@ -73,7 +74,8 @@ const processImage = async (
     const text = response.text;
     if (!text) throw new Error("No response from AI");
 
-    const cleanJson = text.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
+    // Clean up potential markdown code blocks and parse JSON response.
+    const cleanJson = text.trim().replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
     const data = JSON.parse(cleanJson);
     return data.tiles || [];
   } catch (error: any) {
@@ -86,7 +88,7 @@ const processImage = async (
         const delay = INITIAL_DELAY * Math.pow(2, retryCount);
         console.warn(`Rate limit hit. Retrying in ${delay}ms... (Attempt ${retryCount + 1}/${MAX_RETRIES})`);
         await sleep(delay);
-        return processImage(base64Image, dimensions, apiKey, retryCount + 1);
+        return processImage(base64Image, dimensions, retryCount + 1);
       }
     }
 

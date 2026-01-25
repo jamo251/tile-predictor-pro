@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { AppSettings, GameRecord, CellStat, UploadStatus } from './types';
 import { geminiService } from './services/geminiService';
@@ -32,8 +33,6 @@ const App: React.FC = () => {
   const [games, setGames] = useState<GameRecord[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
-  const [apiKey, setApiKey] = useState<string>('');
-  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
 
   useEffect(() => {
     analytics.init();
@@ -58,21 +57,6 @@ const App: React.FC = () => {
       } catch (e) {
         console.error("Failed to parse stored settings", e);
       }
-    }
-
-    if (process.env.API_KEY) {
-      setApiKey(process.env.API_KEY);
-      analytics.trackEvent('API Key Source', { type: 'environment' });
-    } else {
-        const sessionKey = sessionStorage.getItem('gemini_api_key');
-        if(sessionKey) {
-          setApiKey(sessionKey);
-          analytics.trackEvent('API Key Source', { type: 'session' });
-        } else if (!storedGames || JSON.parse(storedGames).length === 0) {
-            analytics.trackEvent('Onboarding Displayed');
-        } else {
-            setIsApiKeyModalOpen(true);
-        }
     }
   }, []);
 
@@ -144,11 +128,6 @@ const App: React.FC = () => {
   };
 
   const processFileUpload = async (files: FileList) => {
-    if (!apiKey) {
-      setIsApiKeyModalOpen(true);
-      return;
-    }
-
     analytics.trackEvent('Analysis Started', { fileCount: files.length });
     setUploadStatus('analyzing');
     const newGames: GameRecord[] = [];
@@ -162,7 +141,8 @@ const App: React.FC = () => {
 
         try {
           const base64String = await fileToBase64(file);
-          const tiles = await geminiService.processImage(base64String, settings.dimensions, apiKey);
+          // Directly invoke service; it manages its own GoogleGenAI client with process.env.API_KEY
+          const tiles = await geminiService.processImage(base64String, settings.dimensions);
           if (tiles.length === 0) continue;
           
           const gameTimestamp = file.lastModified || Date.now();
@@ -239,13 +219,6 @@ const App: React.FC = () => {
     return sorted[0]?.totalOccurrences > 0 ? sorted[0] : null;
   }, [stats, games]);
 
-  const handleApiKeySubmit = (key: string) => {
-      analytics.trackEvent('API Key Set Manually');
-      setApiKey(key);
-      sessionStorage.setItem('gemini_api_key', key);
-      setIsApiKeyModalOpen(false);
-  };
-
   return (
     <div className="flex flex-col md:flex-row h-screen w-full bg-[#040715] overflow-hidden">
       
@@ -289,13 +262,10 @@ const App: React.FC = () => {
 
                     <div className="flex flex-col sm:flex-row gap-5 justify-center items-center pt-6">
                         <button 
-                            onClick={() => {
-                              analytics.trackEvent('Onboarding CTA Clicked', { action: 'connect' });
-                              setIsApiKeyModalOpen(true);
-                            }}
+                            onClick={() => analytics.trackEvent('Get Started Clicked')}
                             className="px-10 py-4 gemini-gradient text-white font-bold rounded-full shadow-[0_0_25px_rgba(71,135,255,0.3)] transition-all hover:scale-105 active:scale-95"
                         >
-                            Connect Gemini
+                            Start Analysis
                         </button>
                         <button 
                             onClick={handleLoadDemo}
@@ -331,41 +301,6 @@ const App: React.FC = () => {
           gameHistory={games}
         />
       </aside>
-
-      {isApiKeyModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xl z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="bg-[#0b1021] border border-white/10 p-8 rounded-[32px] max-w-md w-full shadow-2xl">
-            <div className="w-12 h-12 rounded-2xl gemini-gradient flex items-center justify-center mb-6 shadow-lg shadow-blue-500/20">
-                <Sparkles size={24} className="text-white" />
-            </div>
-            <h3 className="text-2xl font-bold text-white mb-3">AI Configuration</h3>
-            <p className="text-slate-400 text-sm mb-6 leading-relaxed">To analyze boards using visual neural networks, provide your private Google Gemini API key.</p>
-            <form onSubmit={(e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); handleApiKeySubmit(fd.get('key') as string); }}>
-                <input 
-                    name="key"
-                    type="password" 
-                    placeholder="Enter API Key" 
-                    defaultValue={apiKey}
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white mb-6 focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-600"
-                    autoFocus
-                />
-                <div className="flex gap-4">
-                    <button type="button" onClick={() => {
-                       analytics.trackEvent('Modal Cancelled', { modal: 'api_key' });
-                       setIsApiKeyModalOpen(false);
-                    }} className="flex-1 py-4 text-slate-400 hover:text-white font-semibold transition-colors">Dismiss</button>
-                    <button type="submit" className="flex-[2] gemini-gradient text-white font-bold py-4 px-6 rounded-2xl shadow-lg transition-transform active:scale-95">
-                        Set Key
-                    </button>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-8 text-center">
-                    Get a key at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">Google AI Studio</a>. <br/>
-                    Keys are never stored outside your browser.
-                </p>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
