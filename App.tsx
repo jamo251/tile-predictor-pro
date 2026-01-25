@@ -28,10 +28,13 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
+type View = 'landing' | 'analysis';
+
 const App: React.FC = () => {
   const [games, setGames] = useState<GameRecord[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
+  const [currentView, setCurrentView] = useState<View>('landing');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -45,6 +48,7 @@ const App: React.FC = () => {
       try {
         const parsed = JSON.parse(storedGames);
         setGames(parsed);
+        if (parsed.length > 0) setCurrentView('analysis');
       } catch (e) {
         console.error("Failed to parse stored games", e);
       }
@@ -61,17 +65,21 @@ const App: React.FC = () => {
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(games));
+    // Automatically go home if data is cleared
+    if (games.length === 0) {
+      setCurrentView('landing');
+    }
   }, [games]);
 
   useEffect(() => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   }, [settings]);
 
-  const handleClearData = (silent = false) => {
-    if (silent || window.confirm("Are you sure you want to clear the current analysis and return home?")) {
+  const handleClearData = () => {
+    if (window.confirm("Are you sure you want to delete all historical game data?")) {
       setGames([]);
       localStorage.removeItem(STORAGE_KEY);
-      analytics.trackEvent('Data Cleared');
+      analytics.trackEvent('Data Wiped');
     }
   };
 
@@ -98,6 +106,7 @@ const App: React.FC = () => {
         if (Array.isArray(imported)) {
           if (window.confirm(`Import ${imported.length} games? This will merge with your existing data.`)) {
             setGames(prev => [...prev, ...imported]);
+            setCurrentView('analysis');
           }
         }
       } catch (err) {
@@ -119,6 +128,7 @@ const App: React.FC = () => {
       }))
     }));
     setGames(demoGames);
+    setCurrentView('analysis');
   };
 
   const processFileUpload = async (files: FileList) => {
@@ -150,6 +160,7 @@ const App: React.FC = () => {
 
       if (newGames.length > 0) {
         setGames(prev => [...prev, ...newGames]);
+        setCurrentView('analysis');
         setUploadStatus('success');
       } else {
         setUploadStatus('error');
@@ -225,13 +236,13 @@ const App: React.FC = () => {
       <main className="flex-1 relative flex flex-col min-h-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,_rgba(66,133,244,0.08)_0%,_transparent_50%),_radial-gradient(circle_at_70%_80%,_rgba(181,123,255,0.08)_0%,_transparent_50%)] -z-10"></div>
         <div className="flex-1 flex items-center justify-center p-4 sm:p-12 overflow-auto">
-            {games.length > 0 ? (
-                <div className="w-full max-w-5xl animate-in fade-in duration-1000">
+            {currentView === 'analysis' && games.length > 0 ? (
+                <div className="w-full max-w-5xl animate-in fade-in duration-700">
                     <div className="mb-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                         <div className="flex items-center gap-6">
                             <button 
-                                onClick={() => handleClearData()}
-                                title="Back to Home"
+                                onClick={() => setCurrentView('landing')}
+                                title="Back to Home Screen"
                                 className="p-3 rounded-2xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all hover:scale-110 active:scale-95 shadow-lg"
                             >
                                 <Home size={24} />
@@ -249,7 +260,7 @@ const App: React.FC = () => {
                     <HeatmapGrid stats={stats} dimensions={settings.dimensions} onCellClick={() => {}} />
                 </div>
             ) : (
-                <div className="max-w-3xl text-center space-y-10 p-6 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+                <div className="max-w-3xl text-center space-y-10 p-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
                     <div className="space-y-6">
                         <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full bg-white/5 border border-white/10 text-slate-300 text-sm font-medium mb-4">
                             <Sparkles size={16} className="text-[#B57BFF]" />
@@ -269,9 +280,18 @@ const App: React.FC = () => {
                         >
                             Start Analysis
                         </button>
-                        <button onClick={handleLoadDemo} className="px-10 py-4 bg-white/5 hover:bg-white/10 text-white font-bold rounded-full border border-white/10 transition-all hover:scale-105">
-                            Explore Demo
-                        </button>
+                        {games.length > 0 ? (
+                           <button 
+                              onClick={() => setCurrentView('analysis')} 
+                              className="px-10 py-4 bg-white/10 hover:bg-white/20 text-white font-bold rounded-full border border-white/20 transition-all hover:scale-105"
+                           >
+                              Resume Session
+                           </button>
+                        ) : (
+                           <button onClick={handleLoadDemo} className="px-10 py-4 bg-white/5 hover:bg-white/10 text-white font-bold rounded-full border border-white/10 transition-all hover:scale-105">
+                               Explore Demo
+                           </button>
+                        )}
                     </div>
                 </div>
             )}
@@ -283,7 +303,7 @@ const App: React.FC = () => {
             uploadStatus={uploadStatus} 
             settings={settings} 
             onUpdateSettings={setSettings} 
-            onClearData={() => handleClearData()} 
+            onClearData={handleClearData} 
             onDeleteGame={handleDeleteGame} 
             onExportData={handleExportData} 
             onImportData={handleImportData} 
