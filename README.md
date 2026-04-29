@@ -1,20 +1,36 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Tile Predictor Pro
 
-# Run and deploy your AI Studio app
+React + TypeScript app that uploads game board screenshots, uses **Google Gemini** to extract per-cell scores from the image, then aggregates history into a **probability heatmap** (with optional recency weighting). Data stays in **localStorage** with import/export.
 
-This contains everything you need to run your app locally.
+## Stack
 
-View your app in AI Studio: https://ai.studio/apps/drive/1uVefdusB9kclNh6jAew-L9oMkMU80jKA
+- Vite 6, React 19, TypeScript, Tailwind CSS  
+- `@google/genai` (Gemini) with structured JSON output  
+- Optional Amplitude analytics (disabled unless you set a key)
 
-## Run Locally
+## Run locally
 
-**Prerequisites:**  Node.js
+**Prerequisites:** Node.js 20+
 
+1. `npm install`
+2. Copy `.env.example` to `.env.local` and set `VITE_GEMINI_API_KEY`
+3. `npm run dev`
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Other scripts: `npm run build`, `npm run lint`, `npm run format`, `npm test`.
+
+## Environment variables
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `VITE_GEMINI_API_KEY` | Yes | Gemini API key for vision / extraction |
+| `VITE_AMPLITUDE_API_KEY` | No | Enables Amplitude if set |
+
+`VITE_*` variables are embedded in the client bundle. **Do not ship a production app this way** without a backend proxy—anyone can read keys from built assets. For a portfolio / local demo, this is acceptable if you rotate keys if they leak.
+
+## CI
+
+GitHub Actions runs lint, tests, and production build on push and pull requests.
+
+## License
+
+MIT — see [LICENSE](./LICENSE).

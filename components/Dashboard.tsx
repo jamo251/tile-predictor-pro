@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Upload, Calendar, Trash2, Settings, Target, AlertTriangle, Loader2, Info, Clock, History, Download, Share2, Sparkles } from 'lucide-react';
+import { Upload, Trash2, Settings, Target, Loader2, Info, Clock, History, Download, Share2, Sparkles } from 'lucide-react';
 import { AppSettings, CellStat, UploadStatus, GameRecord } from '../types';
 
 interface DashboardProps {
@@ -61,7 +61,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <Sparkles size={16} className="text-white" />
             </div>
             <div>
-                <h1 className="text-xl font-bold tracking-tight text-white leading-tight">Edge</h1>
+                <h1 className="text-xl font-bold tracking-tight text-white leading-tight">Tile Predictor</h1>
                 <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Powered by Gemini</p>
             </div>
         </div>

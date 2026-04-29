@@ -4,7 +4,8 @@ import { geminiService } from './services/geminiService';
 import { HeatmapGrid } from './components/HeatmapGrid';
 import { Dashboard } from './components/Dashboard';
 import { analytics } from './services/analyticsService';
-import { Sparkles, Home, ArrowLeft } from 'lucide-react';
+import { computeCellStats, pickTopRecommendation } from './lib/computeCellStats';
+import { Sparkles, ArrowLeft } from 'lucide-react';
 
 const STORAGE_KEY = 'tile_predictor_data_v1';
 const SETTINGS_KEY = 'tile_predictor_settings_v1';
@@ -93,7 +94,7 @@ const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `edge-predictor-kb-${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `tile-predictor-kb-${new Date().toISOString().split('T')[0]}.json`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -109,7 +110,7 @@ const App: React.FC = () => {
             setCurrentView('analysis');
           }
         }
-      } catch (err) {
+      } catch {
         alert("Invalid database file.");
       }
     };
@@ -166,7 +167,7 @@ const App: React.FC = () => {
         setUploadStatus('error');
       }
       setTimeout(() => setUploadStatus('idle'), 3000);
-    } catch (error) {
+    } catch {
       setUploadStatus('error');
       setTimeout(() => setUploadStatus('idle'), 3000);
     }
@@ -179,48 +180,20 @@ const App: React.FC = () => {
     e.target.value = '';
   };
 
-  const stats = useMemo<CellStat[]>(() => {
-    const cellMap = new Map<string, { total: number; high: number; sum: number }>();
-    const sortedGames = [...games].sort((a, b) => b.timestamp - a.timestamp);
-    
-    sortedGames.forEach((game, index) => {
-      const weight = (settings.recencyBias && index < 5) ? 2 : 1;
-      game.tiles.forEach(tile => {
-        const key = `${tile.row}-${tile.col}`;
-        const current = cellMap.get(key) || { total: 0, high: 0, sum: 0 };
-        current.total += weight;
-        if (tile.value >= settings.highValueThreshold) current.high += weight;
-        current.sum += (tile.value * weight);
-        cellMap.set(key, current);
-      });
-    });
+  const stats = useMemo<CellStat[]>(
+    () =>
+      computeCellStats(games, {
+        dimensions: settings.dimensions,
+        highValueThreshold: settings.highValueThreshold,
+        recencyBias: settings.recencyBias,
+      }),
+    [games, settings.dimensions, settings.highValueThreshold, settings.recencyBias]
+  );
 
-    const calculatedStats: CellStat[] = [];
-    for (let r = 0; r < settings.dimensions.rows; r++) {
-      for (let c = 0; c < settings.dimensions.cols; c++) {
-        const key = `${r}-${c}`;
-        const data = cellMap.get(key);
-        calculatedStats.push({
-          row: r,
-          col: c,
-          totalOccurrences: data?.total || 0,
-          highValueCount: data?.high || 0,
-          averageValue: data ? data.sum / data.total : 0,
-          probability: data && data.total > 0 ? data.high / data.total : 0
-        });
-      }
-    }
-    return calculatedStats;
-  }, [games, settings.dimensions, settings.highValueThreshold, settings.recencyBias]);
-
-  const topRecommendation = useMemo(() => {
-    if (games.length === 0) return null;
-    const sorted = [...stats].sort((a, b) => {
-      if (b.probability !== a.probability) return b.probability - a.probability;
-      return b.averageValue - a.averageValue;
-    });
-    return sorted[0]?.totalOccurrences > 0 ? sorted[0] : null;
-  }, [stats, games]);
+  const topRecommendation = useMemo(
+    () => (games.length === 0 ? null : pickTopRecommendation(stats)),
+    [stats, games.length]
+  );
 
   return (
     <div className="flex flex-col md:flex-row h-screen w-full bg-[#040715] overflow-hidden">

@@ -11,7 +11,13 @@ const processImage = async (
   dimensions: GridDimensions,
   retryCount = 0
 ): Promise<TileData[]> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      'Missing VITE_GEMINI_API_KEY. Copy .env.example to .env.local and set your key.'
+    );
+  }
+  const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
     Analyze this game board screenshot. It is a grid with approximately ${dimensions.rows} rows and ${dimensions.cols} columns.
@@ -48,8 +54,13 @@ const processImage = async (
     const cleanJson = text.trim().replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
     const data = JSON.parse(cleanJson);
     return data.tiles || [];
-  } catch (error: any) {
-    const isRateLimit = error?.message?.includes('429') || error?.status === 429;
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    const status =
+      error && typeof error === 'object' && 'status' in error
+        ? (error as { status?: number }).status
+        : undefined;
+    const isRateLimit = msg.includes('429') || status === 429;
     if (isRateLimit && retryCount < MAX_RETRIES) {
       await sleep(INITIAL_DELAY * Math.pow(2, retryCount));
       return processImage(base64Image, dimensions, retryCount + 1);

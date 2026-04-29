@@ -1,30 +1,30 @@
-
 import * as amplitude from '@amplitude/analytics-browser';
 
-// Amplitude Project API Key for tracking user behavior and analysis performance.
-// Widening type to string to fix TS comparison errors with literal values.
-const AMPLITUDE_API_KEY: string = '8c569f20ca5426865a69e55e0223f1de';
+const AMPLITUDE_API_KEY = import.meta.env.VITE_AMPLITUDE_API_KEY?.trim() ?? '';
+
+function isAnalyticsEnabled(): boolean {
+  return AMPLITUDE_API_KEY.length > 0 && AMPLITUDE_API_KEY !== 'YOUR_AMPLITUDE_API_KEY';
+}
 
 export const analytics = {
   init: () => {
-    // Standard initialization check for API key presence and placeholder validation.
-    if (AMPLITUDE_API_KEY && AMPLITUDE_API_KEY !== 'YOUR_AMPLITUDE_API_KEY') {
+    if (isAnalyticsEnabled()) {
       amplitude.init(AMPLITUDE_API_KEY, undefined, {
         defaultTracking: true,
       });
     }
   },
 
-  trackEvent: (eventName: string, properties?: Record<string, any>) => {
+  trackEvent: (eventName: string, properties?: Record<string, unknown>) => {
     console.debug(`[Analytics] ${eventName}`, properties);
-    if (AMPLITUDE_API_KEY && AMPLITUDE_API_KEY !== 'YOUR_AMPLITUDE_API_KEY') {
+    if (isAnalyticsEnabled()) {
       amplitude.track(eventName, properties);
     }
   },
 
   identifyUser: (userId: string) => {
-    if (AMPLITUDE_API_KEY && AMPLITUDE_API_KEY !== 'YOUR_AMPLITUDE_API_KEY') {
+    if (isAnalyticsEnabled()) {
       amplitude.setUserId(userId);
     }
-  }
+  },
 };
