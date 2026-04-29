@@ -1,5 +1,5 @@
 {
   "name": "Tile Predictor Pro",
-  "description": "A strategic tool to maximize game scores by analyzing historical board patterns using AI.",
+  "description": "Upload board screenshots; Gemini extracts scores; Tile Predictor Pro shows a local-only heatmap of high-score patterns."
   "requestFramePermissions": []
 }

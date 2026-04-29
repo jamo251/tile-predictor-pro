@@ -76,7 +76,7 @@ const App: React.FC = () => {
   }, [settings]);
 
   const handleClearData = () => {
-    if (window.confirm("Are you sure you want to delete all historical game data?")) {
+    if (window.confirm("Delete all saved boards in this browser?")) {
       setGames([]);
       localStorage.removeItem(STORAGE_KEY);
       setCurrentView('landing');
@@ -105,13 +105,13 @@ const App: React.FC = () => {
       try {
         const imported = JSON.parse(e.target?.result as string);
         if (Array.isArray(imported)) {
-          if (window.confirm(`Import ${imported.length} games? This will merge with your existing data.`)) {
+          if (window.confirm(`Import ${imported.length} saved boards? They will merge with what you already have here.`)) {
             setGames(prev => [...prev, ...imported]);
             setCurrentView('analysis');
           }
         }
       } catch {
-        alert("Invalid database file.");
+        alert("That file is not valid saved-board data.");
       }
     };
     reader.readAsText(file);
@@ -219,13 +219,15 @@ const App: React.FC = () => {
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 transition-all hover:scale-105 active:scale-95 shadow-lg group"
                 >
                   <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-                  <span className="text-sm font-bold">Home</span>
+                  <span className="text-sm font-bold">Back</span>
                 </button>
                 <div className="hidden sm:block">
-                  <h2 className="text-2xl font-bold tracking-tight text-white mb-1">Predictive Heatmap</h2>
-                  <div className="flex items-center gap-2 text-slate-400 text-xs">
-                    <span className="px-2 py-0.5 rounded bg-white/5 border border-white/10">{games.length} Samples</span>
-                    <span className="text-blue-400 font-medium">Neural targets active</span>
+                  <h2 className="text-2xl font-bold tracking-tight text-white mb-1">Tile Predictor Pro</h2>
+                  <div className="flex flex-wrap items-center gap-2 text-slate-400 text-xs">
+                    <span className="px-2 py-0.5 rounded bg-white/5 border border-white/10">
+                      {games.length} board{games.length !== 1 ? 's' : ''} saved
+                    </span>
+                    <span className="text-slate-500">Heatmap uses your settings</span>
                   </div>
                 </div>
               </div>
@@ -244,32 +246,44 @@ const App: React.FC = () => {
               <div className="space-y-6">
                 <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full bg-white/5 border border-white/10 text-slate-300 text-sm font-medium mb-4">
                   <Sparkles size={16} className="text-[#B57BFF]" />
-                  Analyze historical patterns with Gemini AI
+                  Board screenshots → score heatmap · Gemini vision
                 </div>
-                <h1 className="text-5xl sm:text-7xl font-black tracking-tight leading-none">
-                  Win with <span className="gemini-text-gradient">Predictive Edge</span>
+                <h1 className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight leading-[1.05]">
+                  Tile Predictor{' '}
+                  <span className="gemini-text-gradient">Pro</span>
                 </h1>
                 <p className="text-lg sm:text-xl text-slate-400 max-w-xl mx-auto leading-relaxed">
-                  Stop guessing. Upload your game boards and let our neural-assisted analysis reveal the hidden probability of high-value scores.
+                  Upload screenshots of the same grid layout. Tile Predictor Pro builds a heatmap of where high
+                  scores showed up across <span className="text-slate-300">your</span> saved boards—everything stays in this browser.
                 </p>
+                <div className="max-w-md mx-auto text-left rounded-2xl border border-white/10 bg-white/[0.02] px-5 py-4 sm:px-6">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">
+                    How it works
+                  </p>
+                  <ol className="list-decimal list-inside space-y-2 text-sm text-slate-400 leading-relaxed">
+                    <li className="pl-1 -indent-1">Upload screenshots of your board.</li>
+                    <li className="pl-1 -indent-1">Gemini reads each tile’s score from the image.</li>
+                    <li className="pl-1 -indent-1">The heatmap updates from every board you add (local only).</li>
+                  </ol>
+                </div>
               </div>
-              <div className="flex flex-col sm:flex-row gap-5 justify-center items-center pt-6">
+              <div className="flex flex-col sm:flex-row gap-5 justify-center items-center pt-2">
                 <button 
                   onClick={() => fileInputRef.current?.click()} 
                   className="px-10 py-4 gemini-gradient text-white font-bold rounded-full shadow-[0_0_25px_rgba(71,135,255,0.3)] transition-all hover:scale-105 active:scale-95"
                 >
-                  Start Analysis
+                  Upload board screenshots
                 </button>
                 {games.length > 0 ? (
                    <button 
                       onClick={() => setCurrentView('analysis')} 
                       className="px-10 py-4 bg-white/10 hover:bg-white/20 text-white font-bold rounded-full border border-white/20 transition-all hover:scale-105"
                    >
-                      Resume Session
+                      Resume heatmap
                    </button>
                 ) : (
                    <button onClick={handleLoadDemo} className="px-10 py-4 bg-white/5 hover:bg-white/10 text-white font-bold rounded-full border border-white/10 transition-all hover:scale-105">
-                       Explore Demo
+                       Try sample data
                    </button>
                 )}
               </div>

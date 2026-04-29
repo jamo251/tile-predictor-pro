@@ -91,19 +91,19 @@ export const HeatmapGrid: React.FC<HeatmapGridProps> = ({ stats, dimensions, onC
                 {total > 0 && (
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 hidden group-hover:block z-50 w-52 p-4 bg-[#0b1021]/95 backdrop-blur-2xl border border-white/20 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] pointer-events-none animate-in fade-in zoom-in-95 duration-200">
                     <div className="text-[10px] font-black text-blue-400 mb-3 border-b border-white/5 pb-2 uppercase tracking-[0.15em]">
-                      Cell {colLabel}{rowLabel} Analytics
+                      Cell {colLabel}{rowLabel}
                     </div>
                     <div className="space-y-2">
                       <div className="flex justify-between items-center text-xs">
-                        <span className="text-slate-400">Heat Level</span>
+                        <span className="text-slate-400">High-score share</span>
                         <span className="text-white font-bold">{(probability * 100).toFixed(1)}%</span>
                       </div>
                       <div className="flex justify-between items-center text-xs">
-                        <span className="text-slate-400">Total Samples</span>
-                        <span className="text-white font-bold">{total} Games</span>
+                        <span className="text-slate-400">Times seen</span>
+                        <span className="text-white font-bold">{total}</span>
                       </div>
                       <div className="flex justify-between items-center text-xs">
-                        <span className="text-slate-400">Mean Value</span>
+                        <span className="text-slate-400">Avg score</span>
                         <span className="text-white font-bold">{Math.round(cell?.averageValue || 0)}</span>
                       </div>
                     </div>
@@ -121,7 +121,7 @@ export const HeatmapGrid: React.FC<HeatmapGridProps> = ({ stats, dimensions, onC
         <div className="flex items-center gap-2"><div className="w-3 h-3 bg-[#1a1c2e] rounded-full"></div> No Signal</div>
         <div className="flex items-center gap-2"><div className="w-3 h-3 bg-[#4787FF] rounded-full"></div> Mid-Heat</div>
         <div className="flex items-center gap-2"><div className="w-3 h-3 bg-cyan-400 rounded-full shadow-[0_0_8px_rgba(34,211,238,0.5)]"></div> High-Heat</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 gemini-gradient rounded-full shadow-[0_0_10px_rgba(181,123,255,0.6)]"></div> Prediction</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 gemini-gradient rounded-full shadow-[0_0_10px_rgba(181,123,255,0.6)]"></div> Strongest pattern</div>
       </div>
     </div>
   );
