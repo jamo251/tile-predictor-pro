@@ -10,6 +10,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],
+    ignores: ['api/**', 'lib/server/**'],
     languageOptions: {
       ecmaVersion: 2022,
       globals: globals.browser,
@@ -21,6 +22,13 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+    },
+  },
+  {
+    files: ['api/**/*.ts', 'lib/server/**/*.ts'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: globals.node,
     },
   }
 );

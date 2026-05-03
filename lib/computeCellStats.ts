@@ -5,10 +5,7 @@ export type CellStatsSettings = Pick<
   'dimensions' | 'highValueThreshold' | 'recencyBias'
 >;
 
-export function computeCellStats(
-  games: GameRecord[],
-  settings: CellStatsSettings
-): CellStat[] {
+export function computeCellStats(games: GameRecord[], settings: CellStatsSettings): CellStat[] {
   const cellMap = new Map<string, { total: number; high: number; sum: number }>();
   const sortedGames = [...games].sort((a, b) => b.timestamp - a.timestamp);
 

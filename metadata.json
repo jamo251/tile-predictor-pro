@@ -1,5 +1,5 @@
 {
   "name": "Tile Predictor Pro",
-  "description": "Upload board screenshots; Gemini extracts scores; Tile Predictor Pro shows a local-only heatmap of high-score patterns."
+  "description": "Upload board screenshots; Gemini extracts scores; Tile Predictor Pro shows a local-only heatmap of high-score patterns.",
   "requestFramePermissions": []
 }

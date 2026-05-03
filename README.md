@@ -1,36 +1,54 @@
 # Tile Predictor Pro
 
-React + TypeScript app that uploads game board screenshots, uses **Google Gemini** to extract per-cell scores from the image, then aggregates history into a **probability heatmap** (with optional recency weighting). Data stays in **localStorage** with import/export.
+Portfolio demo: upload board screenshots, call **Gemini vision** via a **Vercel serverless** route (`/api/analyze-board`), and visualize score patterns in a local-only heatmap (history in `localStorage`).
 
-## Stack
+This repo is meant for **public GitHub**. The Gemini key lives **only** in Vercel environment variables—not in client code.
 
-- Vite 6, React 19, TypeScript, Tailwind CSS  
-- `@google/genai` (Gemini) with structured JSON output  
-- Optional Amplitude analytics (disabled unless you set a key)
+## Deploy on Vercel
 
-## Run locally
+1. Import the GitHub repo in [Vercel](https://vercel.com/).
+2. In **Project → Settings → Environment Variables**, add **`GEMINI_API_KEY`** for Production (and Preview if you want previews to run analysis). Do **not** use a `VITE_` prefix for secrets.
+3. Optional abuse protection for a **public** API: create a free [Upstash](https://upstash.com/) Redis DB and add **`UPSTASH_REDIS_REST_URL`** + **`UPSTASH_REDIS_REST_TOKEN`** on Vercel. Without these, quotas rely on Google's limits plus request validation only.
+4. Optional split-origin: set **`ALLOWED_ORIGINS`** (comma-separated) if the UI calls `/api` from another origin (see [`.env.example`](./.env.example)).
+5. Deploy. Same deployment serves **`dist`** and **`/api/*`**.
 
-**Prerequisites:** Node.js 20+
+## Local development
 
-1. `npm install`
-2. Copy `.env.example` to `.env.local` and set `VITE_GEMINI_API_KEY`
-3. `npm run dev`
+- **`npm install`**
+- Prefer **`npx vercel dev`** — runs Vite + `/api` together (recommended after `vercel link`).
+- **`npm run dev`** (**Vite** on port 5173) proxies **`/api`** to **`http://127.0.0.1:3000`** by default — run **`npx vercel dev`** in another terminal so the API is on **3000** (or override with **`VITE_DEV_API_PROXY`**).
+- **`GEMINI_API_KEY`**: add to `.env` in the repo root (**gitignored**) so **`vercel dev`** loads it, or paste into the Vercel-linked project env.
 
-Other scripts: `npm run build`, `npm run lint`, `npm run format`, `npm test`.
+Never commit `.env`. Copy [`.env.example`](./.env.example) only as documentation.
+
+### If you rotate a leaked key
+
+Revoke/disable the old key in **Google AI Studio / Cloud**, set a fresh **`GEMINI_API_KEY`** in Vercel, and redeploy. The browser bundle never contained the secret.
 
 ## Environment variables
 
-| Variable | Required | Purpose |
-|----------|----------|---------|
-| `VITE_GEMINI_API_KEY` | Yes | Gemini API key for vision / extraction |
-| `VITE_AMPLITUDE_API_KEY` | No | Enables Amplitude if set |
+| Variable                 | Scope                                | Purpose                                      |
+| ------------------------ | ------------------------------------ | -------------------------------------------- |
+| `GEMINI_API_KEY`         | Server (Vercel + local `vercel dev`) | Gemini API — **never** prefixed with `VITE_` |
+| `UPSTASH_*`              | Server                               | Optional Redis rate limiting                 |
+| `ALLOWED_ORIGINS`        | Server                               | Optional CORS allowlist                      |
+| `VITE_API_ORIGIN`        | Client build                         | Only if SPA and API origins differ           |
+| `VITE_AMPLITUDE_API_KEY` | Client                               | Optional analytics                           |
 
-`VITE_*` variables are embedded in the client bundle. **Do not ship a production app this way** without a backend proxy—anyone can read keys from built assets. For a portfolio / local demo, this is acceptable if you rotate keys if they leak.
+## Stack
+
+Vite 6, React 19, TypeScript, Tailwind (built locally — no CDN), Amplitude optional.
+
+## Scripts
+
+`npm run dev`, `npm run build`, `npm run preview`, `npm test`, `npm run lint`.
 
 ## CI
 
-GitHub Actions runs lint, tests, and production build on push and pull requests.
+Lint, tests, and production **`vite`** build run on GitHub Actions.
 
-## License
+## Security notes
+
+Security headers + CSP are set for static responses in **[`vercel.json`](./vercel.json)**. Tune `connect-src` if you add third-party telemetry domains.
 
 MIT — see [LICENSE](./LICENSE).

@@ -10,13 +10,15 @@ export const analytics = {
   init: () => {
     if (isAnalyticsEnabled()) {
       amplitude.init(AMPLITUDE_API_KEY, undefined, {
-        defaultTracking: true,
+        defaultTracking: false,
       });
     }
   },
 
   trackEvent: (eventName: string, properties?: Record<string, unknown>) => {
-    console.debug(`[Analytics] ${eventName}`, properties);
+    if (import.meta.env.DEV) {
+      console.debug(`[Analytics] ${eventName}`, properties);
+    }
     if (isAnalyticsEnabled()) {
       amplitude.track(eventName, properties);
     }

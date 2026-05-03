@@ -20,6 +20,7 @@ interface DashboardProps {
   variant?: 'full' | 'compact';
   onFileUpload: () => void;
   uploadStatus: UploadStatus;
+  uploadErrorHint?: string | null;
   settings: AppSettings;
   onUpdateSettings: (s: AppSettings) => void;
   onClearData: () => void;
@@ -40,6 +41,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   variant = 'full',
   onFileUpload,
   uploadStatus,
+  uploadErrorHint = null,
   settings,
   onUpdateSettings,
   onClearData,
@@ -75,8 +77,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }).format(new Date(timestamp));
   };
 
-  const coordLabel = (cell: CellStat) =>
-    `${String.fromCharCode(65 + cell.col)}${cell.row + 1}`;
+  const coordLabel = (cell: CellStat) => `${String.fromCharCode(65 + cell.col)}${cell.row + 1}`;
 
   return (
     <div className={`h-full flex flex-col overflow-hidden ${compact ? 'gap-4 p-4' : 'gap-8 p-8'}`}>
@@ -128,7 +129,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
-      <div className={`flex-1 overflow-y-auto ${compact ? 'space-y-4 pr-1' : 'space-y-8 pr-2'} custom-scrollbar`}>
+      <div
+        className={`flex-1 overflow-y-auto ${compact ? 'space-y-4 pr-1' : 'space-y-8 pr-2'} custom-scrollbar`}
+      >
         <div className="relative group">
           {!compact && (
             <div className="absolute -inset-0.5 gemini-gradient rounded-3xl blur opacity-20 group-hover:opacity-30 transition duration-1000"></div>
@@ -148,7 +151,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <span className="text-slate-500 text-[10px] uppercase font-bold block mb-1">
                       Top cell
                     </span>
-                    <span className={`font-black text-white tracking-tighter ${compact ? 'text-4xl' : 'text-5xl'}`}>
+                    <span
+                      className={`font-black text-white tracking-tighter ${compact ? 'text-4xl' : 'text-5xl'}`}
+                    >
                       {coordLabel(topRecommendation)}
                     </span>
                   </div>
@@ -156,7 +161,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <span className="text-slate-500 text-[10px] uppercase font-bold block mb-1">
                       Probability
                     </span>
-                    <span className={`font-black gemini-text-gradient ${compact ? 'text-2xl' : 'text-3xl'}`}>
+                    <span
+                      className={`font-black gemini-text-gradient ${compact ? 'text-2xl' : 'text-3xl'}`}
+                    >
                       {Math.round(topRecommendation.probability * 100)}%
                     </span>
                   </div>
@@ -178,7 +185,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <div className="pt-4 border-t border-white/5 flex justify-between items-center text-xs gap-2">
                   <span className="text-slate-500 shrink-0">In your history</span>
                   <span className="text-slate-300 font-mono text-right">
-                    {topRecommendation.highValueCount} hits / {topRecommendation.totalOccurrences} games
+                    {topRecommendation.highValueCount} hits / {topRecommendation.totalOccurrences}{' '}
+                    games
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-600 leading-relaxed">
@@ -230,9 +238,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
           {uploadStatus === 'error' && (
             <div
               role="alert"
-              className="rounded-xl px-4 py-3 text-sm bg-red-500/10 border border-red-500/25 text-red-300"
+              className="rounded-xl px-4 py-3 text-sm bg-red-500/10 border border-red-500/25 text-red-300 space-y-1"
             >
-              No boards could be read. Try clearer screenshots or check your API setup.
+              <p>
+                No boards could be read. Try clearer screenshots or confirm grid size in Settings.
+              </p>
+              {uploadErrorHint ? (
+                <p className="text-red-200/90 text-xs leading-relaxed whitespace-pre-wrap">
+                  {uploadErrorHint}
+                </p>
+              ) : null}
             </div>
           )}
 
@@ -271,7 +286,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
                   Selected cell
                 </p>
-                <p className="text-2xl font-black text-white tracking-tighter">{coordLabel(selectedCell)}</p>
+                <p className="text-2xl font-black text-white tracking-tighter">
+                  {coordLabel(selectedCell)}
+                </p>
               </div>
               <button
                 type="button"
@@ -291,7 +308,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-slate-500">Times seen</dt>
-                <dd className="text-white font-semibold tabular-nums">{selectedCell.totalOccurrences}</dd>
+                <dd className="text-white font-semibold tabular-nums">
+                  {selectedCell.totalOccurrences}
+                </dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-slate-500">Avg score</dt>
@@ -321,7 +340,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {showHistory && (
           <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
             <div className="flex items-center justify-between px-2">
-              <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Board history</h3>
+              <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                Board history
+              </h3>
             </div>
             {sortedHistory.length > 0 ? (
               <div className="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
@@ -434,8 +455,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 className={`w-full bg-[#040715] border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:border-blue-500 outline-none transition-colors ${focusRing}`}
               />
               <p className="text-[11px] text-slate-600 leading-relaxed">
-                A tile counts as a &quot;hit&quot; when its score is greater than or equal to this value (typical game
-                tiles use hundreds–thousands).
+                A tile counts as a &quot;hit&quot; when its score is greater than or equal to this
+                value (typical game tiles use hundreds–thousands).
               </p>
             </div>
 
@@ -460,7 +481,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 aria-checked={settings.recencyBias}
                 aria-labelledby="recency-label"
                 aria-describedby="recency-help"
-                onClick={() => onUpdateSettings({ ...settings, recencyBias: !settings.recencyBias })}
+                onClick={() =>
+                  onUpdateSettings({ ...settings, recencyBias: !settings.recencyBias })
+                }
                 className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ${focusRing} ${
                   settings.recencyBias ? 'bg-blue-600' : 'bg-white/10'
                 }`}
@@ -487,7 +510,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       <div className="shrink-0 pt-6 border-t border-white/5 flex flex-col items-center gap-4">
         <div className="flex items-center gap-1.5 text-slate-600 text-[10px] font-medium tracking-wide">
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0" aria-hidden></span>
+          <span
+            className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0"
+            aria-hidden
+          ></span>
           Data stays in this browser
         </div>
       </div>

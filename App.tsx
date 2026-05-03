@@ -6,6 +6,9 @@ import { Dashboard } from './components/Dashboard';
 import { analytics } from './services/analyticsService';
 import { computeCellStats, pickTopRecommendation } from './lib/computeCellStats';
 import { sanitizeSettings } from './lib/settingsFormatting';
+import { parseImportedGames } from './lib/importGames';
+import { MAX_BATCH_FILES } from './lib/limits';
+import { fileToBase64 } from './lib/imageValidation';
 import { Sparkles, ArrowLeft, LayoutGrid, PanelRight } from 'lucide-react';
 
 const STORAGE_KEY = 'tile_predictor_data_v1';
@@ -17,30 +20,32 @@ const DEFAULT_SETTINGS: AppSettings = {
   recencyBias: true,
 };
 
-const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(',')[1];
-      resolve(base64);
-    };
-    reader.onerror = (error) => reject(error);
-  });
+const tabFocusRing =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/90 focus-visible:ring-offset-2 focus-visible:ring-offset-[#040715]';
+
+const uploadHintFromFailure = (message: string): string => {
+  const m = message.toLowerCase();
+  if (m.includes('service unavailable') || m.includes('503')) {
+    return 'Vercel env: set GEMINI_API_KEY (server-only) on the project and redeploy. It is never bundled into the browser.';
+  }
+  if (m.includes('failed to fetch') || m.includes('network')) {
+    return 'Network error: if you use `npm run vite` alone, run `npx vercel dev` on port 3000 (default) so `/api` proxies, or deploy to Vercel where /api is served with the static app.';
+  }
+  if (m.includes('too many requests') || m.includes('429')) {
+    return 'Rate limited — try again in a minute or add Upstash Redis env vars for fairer limits.';
+  }
+  return message.length > 220 ? `${message.slice(0, 217)}…` : message;
 };
 
 type View = 'landing' | 'analysis';
 
 type MobileTab = 'main' | 'panel';
 
-const tabFocusRing =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/90 focus-visible:ring-offset-2 focus-visible:ring-offset-[#040715]';
-
 const App: React.FC = () => {
   const [games, setGames] = useState<GameRecord[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
+  const [uploadErrorHint, setUploadErrorHint] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<View>('landing');
   const [mobileTab, setMobileTab] = useState<MobileTab>('main');
   const [selectedCoords, setSelectedCoords] = useState<{ row: number; col: number } | null>(null);
@@ -124,15 +129,22 @@ const App: React.FC = () => {
     reader.onload = (e) => {
       try {
         const imported = JSON.parse(e.target?.result as string);
-        if (Array.isArray(imported)) {
-          if (
-            window.confirm(
-              `Import ${imported.length} saved boards? They will merge with what you already have here.`
-            )
-          ) {
-            setGames((prev) => [...prev, ...imported]);
-            setCurrentView('analysis');
-          }
+        const { games: incoming, error } = parseImportedGames(imported, settings.dimensions);
+        if (error) {
+          alert(error);
+          return;
+        }
+        if (incoming.length === 0) {
+          alert('No valid boards were found in that file.');
+          return;
+        }
+        if (
+          window.confirm(
+            `Import ${incoming.length} saved boards? They will merge with what you already have here.`
+          )
+        ) {
+          setGames((prev) => [...prev, ...incoming]);
+          setCurrentView('analysis');
         }
       } catch {
         alert('That file is not valid saved-board data.');
@@ -158,8 +170,10 @@ const App: React.FC = () => {
 
   const processFileUpload = async (files: FileList) => {
     setUploadStatus('analyzing');
+    setUploadErrorHint(null);
     const newGames: GameRecord[] = [];
-    const fileArray = Array.from(files);
+    const fileArray = Array.from(files).slice(0, MAX_BATCH_FILES);
+    let lastFailureMessage = '';
 
     try {
       for (let i = 0; i < fileArray.length; i++) {
@@ -167,8 +181,8 @@ const App: React.FC = () => {
         if (i > 0) await new Promise((resolve) => setTimeout(resolve, 1500));
 
         try {
-          const base64String = await fileToBase64(file);
-          const tiles = await geminiService.processImage(base64String, settings.dimensions);
+          const { base64, mimeType } = await fileToBase64(file);
+          const tiles = await geminiService.processImage(base64, mimeType, settings.dimensions);
           if (tiles.length === 0) continue;
 
           const gameTimestamp = file.lastModified || Date.now();
@@ -180,6 +194,7 @@ const App: React.FC = () => {
           newGames.push(newGame);
         } catch (err) {
           console.error(`Error processing file ${file.name}:`, err);
+          lastFailureMessage = err instanceof Error ? err.message : String(err);
         }
       }
 
@@ -187,12 +202,15 @@ const App: React.FC = () => {
         setGames((prev) => [...prev, ...newGames]);
         setCurrentView('analysis');
         setUploadStatus('success');
+        setUploadErrorHint(null);
       } else {
         setUploadStatus('error');
+        setUploadErrorHint(lastFailureMessage ? uploadHintFromFailure(lastFailureMessage) : null);
       }
       setTimeout(() => setUploadStatus('idle'), 3000);
     } catch {
       setUploadStatus('error');
+      setUploadErrorHint(null);
       setTimeout(() => setUploadStatus('idle'), 3000);
     }
   };
@@ -220,8 +238,7 @@ const App: React.FC = () => {
   );
 
   const topPickCoords = useMemo(
-    () =>
-      topRecommendation ? { row: topRecommendation.row, col: topRecommendation.col } : null,
+    () => (topRecommendation ? { row: topRecommendation.row, col: topRecommendation.col } : null),
     [topRecommendation]
   );
 
@@ -234,11 +251,7 @@ const App: React.FC = () => {
     const isToggleOff = selectedCoords?.row === row && selectedCoords?.col === col;
     const next = isToggleOff ? null : { row, col };
     setSelectedCoords(next);
-    if (
-      next &&
-      typeof window !== 'undefined' &&
-      window.matchMedia('(max-width: 767px)').matches
-    ) {
+    if (next && typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
       setMobileTab('panel');
     }
   };
@@ -273,7 +286,11 @@ const App: React.FC = () => {
                   onClick={() => setCurrentView('landing')}
                   className={`flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 transition-all hover:scale-105 active:scale-95 shadow-lg group shrink-0 ${tabFocusRing}`}
                 >
-                  <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" aria-hidden />
+                  <ArrowLeft
+                    size={18}
+                    className="group-hover:-translate-x-1 transition-transform"
+                    aria-hidden
+                  />
                   <span className="text-sm font-bold">Back</span>
                 </button>
                 <div className="min-w-0 flex flex-col gap-1">
@@ -314,20 +331,25 @@ const App: React.FC = () => {
                   Board screenshots → score heatmap · Gemini vision
                 </div>
                 <h1 className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight leading-[1.05]">
-                  Tile Predictor{' '}
-                  <span className="gemini-text-gradient">Pro</span>
+                  Tile Predictor <span className="gemini-text-gradient">Pro</span>
                 </h1>
                 <p className="text-lg sm:text-xl text-slate-400 max-w-xl mx-auto leading-relaxed">
-                  Upload screenshots of the same grid layout. Tile Predictor Pro builds a heatmap of where high scores
-                  showed up across <span className="text-slate-300">your</span> saved boards—everything stays in this
-                  browser.
+                  Upload screenshots of the same grid layout. Each image is sent to Google&apos;s
+                  Gemini API to read tile scores; your heatmap history is stored only in{' '}
+                  <span className="text-slate-300">this browser</span>.
                 </p>
                 <div className="max-w-md mx-auto text-left rounded-2xl border border-white/10 bg-white/[0.02] px-5 py-4 sm:px-6">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">How it works</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">
+                    How it works
+                  </p>
                   <ol className="list-decimal list-inside space-y-2 text-sm text-slate-400 leading-relaxed">
                     <li className="pl-1 -indent-1">Upload screenshots of your board.</li>
-                    <li className="pl-1 -indent-1">Gemini reads each tile’s score from the image.</li>
-                    <li className="pl-1 -indent-1">The heatmap updates from every board you add (local only).</li>
+                    <li className="pl-1 -indent-1">
+                      Gemini reads tile scores from the image over the network (server-side key).
+                    </li>
+                    <li className="pl-1 -indent-1">
+                      Scores aggregate into a heatmap saved locally in your browser.
+                    </li>
                   </ol>
                 </div>
               </div>
@@ -369,6 +391,7 @@ const App: React.FC = () => {
           variant={currentView === 'landing' ? 'compact' : 'full'}
           onFileUpload={() => fileInputRef.current?.click()}
           uploadStatus={uploadStatus}
+          uploadErrorHint={uploadErrorHint}
           settings={settings}
           onUpdateSettings={(s) => setSettings(sanitizeSettings(s))}
           onClearData={handleClearData}

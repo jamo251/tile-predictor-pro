@@ -1,72 +1,55 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { GridDimensions, TileData } from "../types";
+import type { GridDimensions, TileData } from '../types';
 
 const MAX_RETRIES = 3;
-const INITIAL_DELAY = 2000;
+const INITIAL_DELAY_MS = 2000;
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const processImage = async (
+function normalizeOrigin(u: string): string {
+  return u.trim().replace(/\/$/, '');
+}
+
+async function postAnalyzeBoard(
   base64Image: string,
+  mimeType: string,
   dimensions: GridDimensions,
-  retryCount = 0
-): Promise<TileData[]> => {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      'Missing VITE_GEMINI_API_KEY. Copy .env.example to .env.local and set your key.'
-    );
+  retryCount: number
+): Promise<TileData[]> {
+  const origin = normalizeOrigin(import.meta.env.VITE_API_ORIGIN ?? '');
+  const url = `${origin}/api/analyze-board`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      base64Image,
+      mimeType,
+      dimensions: { rows: dimensions.rows, cols: dimensions.cols },
+    }),
+  });
+
+  const isRateLimited = res.status === 429;
+  if (isRateLimited && retryCount < MAX_RETRIES) {
+    await sleep(INITIAL_DELAY_MS * Math.pow(2, retryCount));
+    return postAnalyzeBoard(base64Image, mimeType, dimensions, retryCount + 1);
   }
-  const ai = new GoogleGenAI({ apiKey });
 
-  const prompt = `
-    Analyze this game board screenshot. It is a grid with approximately ${dimensions.rows} rows and ${dimensions.cols} columns.
-    1. Identify the grid structure.
-    2. Extract numeric score value from each tile.
-    3. Return JSON object with 'tiles' array.
-  `;
-
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: { parts: [{ inlineData: { mimeType: "image/jpeg", data: base64Image } }, { text: prompt }] },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            tiles: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: { row: { type: Type.INTEGER }, col: { type: Type.INTEGER }, value: { type: Type.INTEGER } },
-                required: ["row", "col", "value"],
-              },
-            },
-          },
-          required: ["tiles"]
-        },
-      },
-    });
-
-    const text = response.text;
-    if (!text) throw new Error("No response from AI");
-    const cleanJson = text.trim().replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
-    const data = JSON.parse(cleanJson);
-    return data.tiles || [];
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : String(error);
-    const status =
-      error && typeof error === 'object' && 'status' in error
-        ? (error as { status?: number }).status
-        : undefined;
-    const isRateLimit = msg.includes('429') || status === 429;
-    if (isRateLimit && retryCount < MAX_RETRIES) {
-      await sleep(INITIAL_DELAY * Math.pow(2, retryCount));
-      return processImage(base64Image, dimensions, retryCount + 1);
+  if (!res.ok) {
+    let message = '';
+    try {
+      const j = (await res.json()) as { error?: string };
+      message = j.error ?? '';
+    } catch {
+      message = await res.text();
     }
-    throw error;
+    throw new Error(message.trim() || `Analysis failed (${res.status})`);
   }
-};
+
+  const data = (await res.json()) as { tiles?: TileData[] };
+  return data.tiles ?? [];
+}
+
+async function processImage(base64Image: string, mimeType: string, dimensions: GridDimensions) {
+  return postAnalyzeBoard(base64Image, mimeType, dimensions, 0);
+}
 
 export const geminiService = { processImage };
