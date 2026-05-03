@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { z } from 'zod';
-import { analyzeBoardImage } from '../lib/server/analyzeBoardCore';
+import { analyzeBoardImage } from './lib/analyzeBoardCore.js';
 
 /** ~3.5M base64 chars keeps JSON body under Vercel serverless limits (~4.5MB). */
 const MAX_BASE64_CHARS = 3_500_000;

@@ -10,7 +10,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],
-    ignores: ['api/**', 'lib/server/**'],
+    ignores: ['api/**'],
     languageOptions: {
       ecmaVersion: 2022,
       globals: globals.browser,
@@ -25,7 +25,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['api/**/*.ts', 'lib/server/**/*.ts'],
+    files: ['api/**/*.ts'],
     languageOptions: {
       ecmaVersion: 2022,
       globals: globals.node,
