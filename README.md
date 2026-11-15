@@ -1,6 +1,6 @@
 # Tile Predictor Pro
 
-Portfolio demo: upload board screenshots, call **Gemini vision** via a **Vercel serverless** route (`/api/analyze-board`), and visualize score patterns in a local-only heatmap (history in `localStorage`).
+Portfolio demo: upload a folder or gallery of board screenshots (up to 100 per batch), call **Gemini vision** via a **Vercel serverless** route (`/api/analyze-board`), and visualize score patterns in a local-only heatmap plus play analysis (history in `localStorage`).
 
 This repo is meant for **public GitHub**. The Gemini key lives **only** in Vercel environment variables—not in client code.
 
@@ -38,6 +38,8 @@ Revoke/disable the old key in **Google AI Studio / Cloud**, set a fresh **`GEMIN
 ## Stack
 
 Vite 6, React 19, TypeScript, Tailwind (built locally — no CDN), Amplitude optional.
+
+On desktop, **Add folder** uses the browser folder picker. On a phone, **Add from photos** opens the gallery for multi-select (iOS Safari cannot pick a whole album as a folder). Each screenshot is analyzed sequentially so a long batch can be cancelled without losing boards already saved.
 
 ## Scripts
 

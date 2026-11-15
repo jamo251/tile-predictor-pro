@@ -31,3 +31,33 @@ export interface AppSettings {
 }
 
 export type UploadStatus = 'idle' | 'analyzing' | 'success' | 'error';
+
+export interface BatchProgress {
+  current: number;
+  total: number;
+  succeeded: number;
+  failed: number;
+  currentFilename: string;
+}
+
+export interface LastImportSummary {
+  processed: number;
+  added: number;
+  failed: number;
+  skippedNonImages: number;
+  truncated: boolean;
+  cancelled: boolean;
+}
+
+export type HistoryTrend = 'up' | 'down' | 'flat';
+
+export interface HistoryAnalysis {
+  boardCount: number;
+  firstTimestamp: number | null;
+  lastTimestamp: number | null;
+  averageTileScore: number;
+  hitRate: number;
+  trend: HistoryTrend;
+  hottest: CellStat[];
+  coldest: CellStat[];
+}
