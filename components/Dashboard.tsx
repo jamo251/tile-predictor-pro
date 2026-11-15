@@ -1,6 +1,5 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  Upload,
   Trash2,
   Settings,
   Target,
@@ -10,17 +9,36 @@ import {
   History,
   Download,
   FolderInput,
+  FolderOpen,
+  Images,
   Sparkles,
+  TrendingUp,
+  TrendingDown,
+  Minus,
   X,
 } from 'lucide-react';
-import { AppSettings, CellStat, UploadStatus, GameRecord } from '../types';
+import {
+  AppSettings,
+  CellStat,
+  UploadStatus,
+  GameRecord,
+  BatchProgress,
+  LastImportSummary,
+  HistoryAnalysis,
+} from '../types';
 import { clampDimension, clampThreshold } from '../lib/settingsFormatting';
+import { MAX_BATCH_FILES, MAX_IMPORTED_GAMES_TOTAL } from '../lib/limits';
 
 interface DashboardProps {
   variant?: 'full' | 'compact';
-  onFileUpload: () => void;
+  onPhotoUpload: () => void;
+  onFolderUpload: () => void;
+  onCancelUpload: () => void;
   uploadStatus: UploadStatus;
   uploadErrorHint?: string | null;
+  batchProgress: BatchProgress | null;
+  lastImport: LastImportSummary | null;
+  historyAnalysis: HistoryAnalysis;
   settings: AppSettings;
   onUpdateSettings: (s: AppSettings) => void;
   onClearData: () => void;
@@ -37,11 +55,50 @@ interface DashboardProps {
 const focusRing =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/90 focus-visible:ring-offset-2 focus-visible:ring-offset-[#040715]';
 
+function lastImportMessage(summary: LastImportSummary): string {
+  const parts: string[] = [];
+  if (summary.processed > 0) {
+    parts.push(
+      `${summary.added} of ${summary.processed} board${summary.processed === 1 ? '' : 's'} added`
+    );
+  } else {
+    parts.push('No boards added');
+  }
+  if (summary.failed > 0) {
+    parts.push(`${summary.failed} could not be read`);
+  }
+  if (summary.skippedNonImages > 0) {
+    parts.push(
+      `${summary.skippedNonImages} non-image file${summary.skippedNonImages === 1 ? '' : 's'} skipped`
+    );
+  }
+  if (summary.truncated) {
+    parts.push(
+      `stopped at ${MAX_BATCH_FILES} per batch or ${MAX_IMPORTED_GAMES_TOTAL} saved boards`
+    );
+  }
+  if (summary.cancelled) {
+    parts.push('import cancelled');
+  }
+  return parts.join(' · ');
+}
+
+const trendCopy = {
+  up: { label: 'Rising', Icon: TrendingUp },
+  down: { label: 'Falling', Icon: TrendingDown },
+  flat: { label: 'Steady', Icon: Minus },
+} as const;
+
 export const Dashboard: React.FC<DashboardProps> = ({
   variant = 'full',
-  onFileUpload,
+  onPhotoUpload,
+  onFolderUpload,
+  onCancelUpload,
   uploadStatus,
   uploadErrorHint = null,
+  batchProgress,
+  lastImport,
+  historyAnalysis,
   settings,
   onUpdateSettings,
   onClearData,
@@ -55,9 +112,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
   gameHistory,
 }) => {
   const importInputRef = useRef<HTMLInputElement>(null);
+  const historyPanelRef = useRef<HTMLDivElement>(null);
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const compact = variant === 'compact';
+
+  useEffect(() => {
+    if (showHistory) {
+      historyPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [showHistory]);
+
+  useEffect(() => {
+    if (showSettings) {
+      settingsPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [showSettings]);
 
   const handleImportChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -78,6 +149,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const coordLabel = (cell: CellStat) => `${String.fromCharCode(65 + cell.col)}${cell.row + 1}`;
+  const trend = trendCopy[historyAnalysis.trend];
 
   return (
     <div className={`h-full flex flex-col overflow-hidden ${compact ? 'gap-4 p-4' : 'gap-8 p-8'}`}>
@@ -208,34 +280,94 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         <div className="space-y-4">
-          <button
-            type="button"
-            onClick={onFileUpload}
-            disabled={uploadStatus === 'analyzing'}
-            className={`group w-full relative flex items-center justify-center gap-3 py-5 px-6 rounded-2xl transition-all font-bold overflow-hidden disabled:opacity-70 disabled:pointer-events-none ${focusRing}`}
-          >
-            <div className="absolute inset-0 gemini-gradient opacity-90 group-hover:opacity-100 transition-opacity"></div>
-            <div className="relative flex items-center gap-3 text-white">
-              {uploadStatus === 'analyzing' ? (
-                <Loader2 className="animate-spin" size={20} aria-hidden />
-              ) : (
-                <Upload size={20} aria-hidden />
-              )}
-              <span className="tracking-tight">
-                {uploadStatus === 'analyzing' ? 'Reading boards…' : 'Add board screenshots'}
-              </span>
-            </div>
-          </button>
+          <div className="grid grid-cols-1 gap-3">
+            <button
+              type="button"
+              onClick={onPhotoUpload}
+              disabled={uploadStatus === 'analyzing'}
+              className={`group w-full relative flex items-center justify-center gap-3 py-5 px-6 rounded-2xl transition-all font-bold overflow-hidden disabled:opacity-70 disabled:pointer-events-none ${focusRing}`}
+            >
+              <div className="absolute inset-0 gemini-gradient opacity-90 group-hover:opacity-100 transition-opacity"></div>
+              <div className="relative flex items-center gap-3 text-white">
+                {uploadStatus === 'analyzing' ? (
+                  <Loader2 className="animate-spin" size={20} aria-hidden />
+                ) : (
+                  <Images size={20} aria-hidden />
+                )}
+                <span className="tracking-tight">
+                  {uploadStatus === 'analyzing' ? 'Reading boards…' : 'Add from photos'}
+                </span>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={onFolderUpload}
+              disabled={uploadStatus === 'analyzing'}
+              className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl transition-all text-xs font-bold border disabled:opacity-70 disabled:pointer-events-none ${focusRing} bg-transparent border-white/10 text-slate-300 hover:text-white hover:bg-white/5`}
+            >
+              <FolderOpen size={16} aria-hidden />
+              Add folder
+            </button>
+            <p className="text-[11px] text-slate-500 leading-relaxed px-1">
+              On a phone, use Add from photos and pick many shots from your gallery. Folder pick
+              works on a computer.
+            </p>
+          </div>
 
-          {uploadStatus === 'success' && (
+          {batchProgress && (
             <div
               role="status"
-              className="rounded-xl px-4 py-3 text-sm bg-emerald-500/10 border border-emerald-500/25 text-emerald-200"
+              className="rounded-xl px-4 py-3 text-sm bg-white/5 border border-white/10 text-slate-200 space-y-3"
             >
-              Boards added successfully.
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold text-white">
+                    Reading {batchProgress.current} of {batchProgress.total}
+                  </p>
+                  <p className="text-[11px] text-slate-400 truncate">
+                    {batchProgress.currentFilename || 'Preparing…'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={onCancelUpload}
+                  className={`shrink-0 text-xs font-bold text-slate-300 hover:text-white underline-offset-2 hover:underline ${focusRing} rounded px-1`}
+                >
+                  Cancel
+                </button>
+              </div>
+              <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden border border-white/5 p-[1px]">
+                <div
+                  className="gemini-gradient h-full rounded-full transition-all duration-300"
+                  style={{
+                    width: `${
+                      batchProgress.total > 0
+                        ? Math.round((batchProgress.current / batchProgress.total) * 100)
+                        : 0
+                    }%`,
+                  }}
+                ></div>
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium">
+                {batchProgress.succeeded} added · {batchProgress.failed} failed
+              </p>
             </div>
           )}
-          {uploadStatus === 'error' && (
+
+          {lastImport && uploadStatus !== 'analyzing' && (
+            <div
+              role="status"
+              className={`rounded-xl px-4 py-3 text-sm border space-y-1 ${
+                lastImport.added > 0
+                  ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-200'
+                  : 'bg-red-500/10 border-red-500/25 text-red-300'
+              }`}
+            >
+              <p>{lastImportMessage(lastImport)}</p>
+            </div>
+          )}
+
+          {uploadStatus === 'error' && !lastImport && (
             <div
               role="alert"
               className="rounded-xl px-4 py-3 text-sm bg-red-500/10 border border-red-500/25 text-red-300 space-y-1"
@@ -250,6 +382,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
               ) : null}
             </div>
           )}
+          {uploadStatus === 'error' && lastImport && uploadErrorHint ? (
+            <p className="text-red-200/90 text-xs leading-relaxed whitespace-pre-wrap px-1">
+              {uploadErrorHint}
+            </p>
+          ) : null}
 
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -278,6 +415,68 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </button>
           </div>
         </div>
+
+        {historyAnalysis.boardCount > 0 && (
+          <div
+            className={`glass-panel rounded-2xl border border-white/10 space-y-4 ${compact ? 'p-4' : 'p-5'}`}
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-[#B57BFF] shrink-0" aria-hidden />
+              <h2 className="font-bold text-white text-sm uppercase tracking-wider">
+                Play analysis
+              </h2>
+            </div>
+            <dl className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <dt className="text-slate-500 mb-0.5">Boards</dt>
+                <dd className="text-white font-semibold tabular-nums">
+                  {historyAnalysis.boardCount}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-slate-500 mb-0.5">Avg score</dt>
+                <dd className="text-white font-semibold tabular-nums">
+                  {Math.round(historyAnalysis.averageTileScore)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-slate-500 mb-0.5">High-score hit rate</dt>
+                <dd className="text-white font-semibold tabular-nums">
+                  {Math.round(historyAnalysis.hitRate * 100)}%
+                </dd>
+              </div>
+              <div>
+                <dt className="text-slate-500 mb-0.5">Trend</dt>
+                <dd className="text-white font-semibold flex items-center gap-1.5">
+                  <trend.Icon size={14} aria-hidden />
+                  {trend.label}
+                </dd>
+              </div>
+            </dl>
+            {historyAnalysis.firstTimestamp !== null && historyAnalysis.lastTimestamp !== null && (
+              <p className="text-[11px] text-slate-500">
+                {formatDate(historyAnalysis.firstTimestamp)} –{' '}
+                {formatDate(historyAnalysis.lastTimestamp)}
+              </p>
+            )}
+            {(historyAnalysis.hottest.length > 0 || historyAnalysis.coldest.length > 0) && (
+              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/5 text-[11px]">
+                <div>
+                  <p className="text-slate-500 uppercase tracking-widest font-bold mb-1">Hottest</p>
+                  <p className="text-slate-200 font-mono">
+                    {historyAnalysis.hottest.map(coordLabel).join(', ') || '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-500 uppercase tracking-widest font-bold mb-1">Coldest</p>
+                  <p className="text-slate-200 font-mono">
+                    {historyAnalysis.coldest.map(coordLabel).join(', ') || '—'}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {selectedCell && selectedCell.totalOccurrences > 0 && (
           <div className="p-5 glass-panel rounded-2xl border border-white/10 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
@@ -338,7 +537,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         )}
 
         {showHistory && (
-          <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+          <div ref={historyPanelRef} className="space-y-3 animate-in fade-in slide-in-from-top-2">
             <div className="flex items-center justify-between px-2">
               <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                 Board history
@@ -384,7 +583,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
         )}
 
         {showSettings && (
-          <div className="p-6 glass-panel rounded-[24px] space-y-6 animate-in fade-in slide-in-from-bottom-2">
+          <div
+            ref={settingsPanelRef}
+            className="p-6 glass-panel rounded-[24px] space-y-6 animate-in fade-in slide-in-from-bottom-2"
+          >
             <div className="space-y-3">
               <label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">
                 Board matrix

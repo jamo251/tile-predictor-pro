@@ -1,13 +1,22 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { AppSettings, GameRecord, CellStat, UploadStatus } from './types';
+import {
+  AppSettings,
+  GameRecord,
+  CellStat,
+  UploadStatus,
+  BatchProgress,
+  LastImportSummary,
+} from './types';
 import { geminiService } from './services/geminiService';
 import { HeatmapGrid } from './components/HeatmapGrid';
 import { Dashboard } from './components/Dashboard';
 import { analytics } from './services/analyticsService';
 import { computeCellStats, pickTopRecommendation } from './lib/computeCellStats';
+import { computeHistoryAnalysis } from './lib/computeHistoryAnalysis';
 import { sanitizeSettings } from './lib/settingsFormatting';
 import { parseImportedGames } from './lib/importGames';
-import { MAX_BATCH_FILES } from './lib/limits';
+import { collectImageFiles } from './lib/collectImageFiles';
+import { MAX_BATCH_FILES, MAX_IMPORTED_GAMES_TOTAL } from './lib/limits';
 import { fileToBase64 } from './lib/imageValidation';
 import { Sparkles, ArrowLeft, LayoutGrid, PanelRight } from 'lucide-react';
 
@@ -46,10 +55,15 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
   const [uploadErrorHint, setUploadErrorHint] = useState<string | null>(null);
+  const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
+  const [lastImportSummary, setLastImportSummary] = useState<LastImportSummary | null>(null);
   const [currentView, setCurrentView] = useState<View>('landing');
   const [mobileTab, setMobileTab] = useState<MobileTab>('main');
   const [selectedCoords, setSelectedCoords] = useState<{ row: number; col: number } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const cancelUploadRef = useRef(false);
+  const isUploadingRef = useRef(false);
 
   useEffect(() => {
     analytics.init();
@@ -169,57 +183,154 @@ const App: React.FC = () => {
   };
 
   const processFileUpload = async (files: FileList) => {
+    if (isUploadingRef.current) return;
+    isUploadingRef.current = true;
+    cancelUploadRef.current = false;
+
+    const remainingSlots = Math.max(0, MAX_IMPORTED_GAMES_TOTAL - games.length);
+    const maxFiles = Math.min(MAX_BATCH_FILES, remainingSlots);
+    const idleSoon = () => {
+      window.setTimeout(() => setUploadStatus('idle'), 3000);
+    };
+
+    if (maxFiles <= 0) {
+      setUploadStatus('error');
+      setUploadErrorHint(
+        `You already have ${MAX_IMPORTED_GAMES_TOTAL} saved boards. Export or delete some before adding more.`
+      );
+      setBatchProgress(null);
+      isUploadingRef.current = false;
+      idleSoon();
+      return;
+    }
+
+    const collected = collectImageFiles(files, { maxFiles });
+    if (collected.files.length === 0) {
+      setUploadStatus('error');
+      setLastImportSummary({
+        processed: 0,
+        added: 0,
+        failed: 0,
+        skippedNonImages: collected.skippedNonImages,
+        truncated: collected.truncated,
+        cancelled: false,
+      });
+      setUploadErrorHint(
+        collected.skippedNonImages > 0
+          ? 'No supported images found. Use JPEG, PNG, WebP, or GIF screenshots.'
+          : 'No files were selected.'
+      );
+      setBatchProgress(null);
+      isUploadingRef.current = false;
+      idleSoon();
+      return;
+    }
+
     setUploadStatus('analyzing');
     setUploadErrorHint(null);
-    const newGames: GameRecord[] = [];
-    const fileArray = Array.from(files).slice(0, MAX_BATCH_FILES);
+    setLastImportSummary(null);
+    setMobileTab('panel');
+    setBatchProgress({
+      current: 0,
+      total: collected.files.length,
+      succeeded: 0,
+      failed: 0,
+      currentFilename: collected.files[0].name,
+    });
+
+    const dimensions = settings.dimensions;
+    let succeeded = 0;
+    let failed = 0;
     let lastFailureMessage = '';
+    let cancelled = false;
 
     try {
-      for (let i = 0; i < fileArray.length; i++) {
-        const file = fileArray[i];
-        if (i > 0) await new Promise((resolve) => setTimeout(resolve, 1500));
+      for (let i = 0; i < collected.files.length; i++) {
+        if (cancelUploadRef.current) {
+          cancelled = true;
+          break;
+        }
+        if (i > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          if (cancelUploadRef.current) {
+            cancelled = true;
+            break;
+          }
+        }
+
+        const file = collected.files[i];
+        const progressFor = (nextSucceeded: number, nextFailed: number): BatchProgress => ({
+          current: i + 1,
+          total: collected.files.length,
+          succeeded: nextSucceeded,
+          failed: nextFailed,
+          currentFilename: file.name,
+        });
+        setBatchProgress(progressFor(succeeded, failed));
 
         try {
           const { base64, mimeType } = await fileToBase64(file);
-          const tiles = await geminiService.processImage(base64, mimeType, settings.dimensions);
-          if (tiles.length === 0) continue;
+          const tiles = await geminiService.processImage(base64, mimeType, dimensions);
+          if (tiles.length === 0) {
+            failed += 1;
+            setBatchProgress(progressFor(succeeded, failed));
+            continue;
+          }
 
-          const gameTimestamp = file.lastModified || Date.now();
           const newGame: GameRecord = {
             id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            timestamp: gameTimestamp,
-            tiles: tiles,
+            timestamp: file.lastModified || Date.now(),
+            tiles,
           };
-          newGames.push(newGame);
+          setGames((prev) => [...prev, newGame]);
+          setCurrentView('analysis');
+          succeeded += 1;
+          setBatchProgress(progressFor(succeeded, failed));
         } catch (err) {
           console.error(`Error processing file ${file.name}:`, err);
           lastFailureMessage = err instanceof Error ? err.message : String(err);
+          failed += 1;
+          setBatchProgress(progressFor(succeeded, failed));
         }
       }
 
-      if (newGames.length > 0) {
-        setGames((prev) => [...prev, ...newGames]);
-        setCurrentView('analysis');
+      setLastImportSummary({
+        processed: succeeded + failed,
+        added: succeeded,
+        failed,
+        skippedNonImages: collected.skippedNonImages,
+        truncated: collected.truncated,
+        cancelled,
+      });
+      setBatchProgress(null);
+
+      if (succeeded > 0) {
         setUploadStatus('success');
         setUploadErrorHint(null);
       } else {
         setUploadStatus('error');
         setUploadErrorHint(lastFailureMessage ? uploadHintFromFailure(lastFailureMessage) : null);
       }
-      setTimeout(() => setUploadStatus('idle'), 3000);
+      idleSoon();
     } catch {
       setUploadStatus('error');
       setUploadErrorHint(null);
-      setTimeout(() => setUploadStatus('idle'), 3000);
+      setBatchProgress(null);
+      idleSoon();
+    } finally {
+      isUploadingRef.current = false;
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      processFileUpload(e.target.files);
+      void processFileUpload(e.target.files);
     }
     e.target.value = '';
+  };
+
+  const handleCancelUpload = () => {
+    cancelUploadRef.current = true;
   };
 
   const stats = useMemo<CellStat[]>(
@@ -235,6 +346,15 @@ const App: React.FC = () => {
   const topRecommendation = useMemo(
     () => (games.length === 0 ? null : pickTopRecommendation(stats)),
     [stats, games.length]
+  );
+
+  const historyAnalysis = useMemo(
+    () =>
+      computeHistoryAnalysis(games, {
+        dimensions: settings.dimensions,
+        highValueThreshold: settings.highValueThreshold,
+      }),
+    [games, settings.dimensions, settings.highValueThreshold]
   );
 
   const topPickCoords = useMemo(
@@ -265,10 +385,23 @@ const App: React.FC = () => {
     <div className="flex flex-col md:flex-row h-[100dvh] md:h-screen w-full bg-[#040715] overflow-hidden">
       <input
         type="file"
-        ref={fileInputRef}
+        ref={photoInputRef}
         className="hidden"
         accept="image/*"
         multiple
+        onChange={handleFileChange}
+      />
+      <input
+        type="file"
+        ref={(el) => {
+          folderInputRef.current = el;
+          if (el) {
+            el.setAttribute('webkitdirectory', '');
+            el.setAttribute('directory', '');
+            el.multiple = true;
+          }
+        }}
+        className="hidden"
         onChange={handleFileChange}
       />
 
@@ -305,6 +438,12 @@ const App: React.FC = () => {
                   <span className="text-slate-500 text-[11px] sm:text-xs">
                     Heatmap uses your settings (threshold {settings.highValueThreshold})
                   </span>
+                  {batchProgress && (
+                    <span className="text-slate-400 text-[11px] sm:text-xs truncate">
+                      Reading {batchProgress.current}/{batchProgress.total}
+                      {batchProgress.currentFilename ? ` · ${batchProgress.currentFilename}` : ''}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -343,23 +482,36 @@ const App: React.FC = () => {
                     How it works
                   </p>
                   <ol className="list-decimal list-inside space-y-2 text-sm text-slate-400 leading-relaxed">
-                    <li className="pl-1 -indent-1">Upload screenshots of your board.</li>
                     <li className="pl-1 -indent-1">
-                      Gemini reads tile scores from the image over the network (server-side key).
+                      Add a folder of screenshots on a computer, or many photos from your phone
+                      gallery.
                     </li>
                     <li className="pl-1 -indent-1">
-                      Scores aggregate into a heatmap saved locally in your browser.
+                      Gemini reads tile scores from each image over the network (server-side key).
+                    </li>
+                    <li className="pl-1 -indent-1">
+                      Scores aggregate into a heatmap and play analysis saved locally in this
+                      browser.
                     </li>
                   </ol>
                 </div>
               </div>
-              <div className="flex flex-col sm:flex-row gap-5 justify-center items-center pt-2">
+              <div className="flex flex-col sm:flex-row flex-wrap gap-4 justify-center items-center pt-2">
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`px-10 py-4 gemini-gradient text-white font-bold rounded-full shadow-[0_0_25px_rgba(71,135,255,0.3)] transition-all hover:scale-105 active:scale-95 ${tabFocusRing}`}
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={uploadStatus === 'analyzing'}
+                  className={`px-8 py-4 gemini-gradient text-white font-bold rounded-full shadow-[0_0_25px_rgba(71,135,255,0.3)] transition-all hover:scale-105 active:scale-95 disabled:opacity-70 disabled:pointer-events-none ${tabFocusRing}`}
                 >
-                  Upload board screenshots
+                  Add from photos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => folderInputRef.current?.click()}
+                  disabled={uploadStatus === 'analyzing'}
+                  className={`px-8 py-4 bg-white/10 hover:bg-white/20 text-white font-bold rounded-full border border-white/20 transition-all hover:scale-105 disabled:opacity-70 disabled:pointer-events-none ${tabFocusRing}`}
+                >
+                  Add folder
                 </button>
                 {games.length > 0 ? (
                   <button
@@ -379,6 +531,10 @@ const App: React.FC = () => {
                   </button>
                 )}
               </div>
+              <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                On a phone, use Add from photos and multi-select from your gallery. Folder pick
+                works on a computer.
+              </p>
             </div>
           </div>
         )}
@@ -389,9 +545,14 @@ const App: React.FC = () => {
       >
         <Dashboard
           variant={currentView === 'landing' ? 'compact' : 'full'}
-          onFileUpload={() => fileInputRef.current?.click()}
+          onPhotoUpload={() => photoInputRef.current?.click()}
+          onFolderUpload={() => folderInputRef.current?.click()}
+          onCancelUpload={handleCancelUpload}
           uploadStatus={uploadStatus}
           uploadErrorHint={uploadErrorHint}
+          batchProgress={batchProgress}
+          lastImport={lastImportSummary}
+          historyAnalysis={historyAnalysis}
           settings={settings}
           onUpdateSettings={(s) => setSettings(sanitizeSettings(s))}
           onClearData={handleClearData}
